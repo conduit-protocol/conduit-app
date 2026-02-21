@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+:root {
+  --font-geist-sans: 'Geist Sans', system-ui, sans-serif;
+  --font-geist-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ── Component layer — reusable classes ────────────────────────────────────── */
+@layer components {
+  /* Primary button */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 text-sm font-semibold
+           rounded transition-colors duration-150
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply btn bg-black text-white hover:bg-gray-800 active:bg-gray-900;
+  }
+
+  .btn-secondary {
+    @apply btn bg-white text-black border border-gray-300 hover:bg-gray-50 active:bg-gray-100;
+  }
+
+  .btn-ghost {
+    @apply btn text-gray-600 hover:text-black hover:bg-gray-100;
+  }
+
+  /* Card container */
+  .card {
+    @apply bg-white border border-gray-200 rounded p-4 shadow-card;
+  }
+
+  /* Input */
+  .input {
+    @apply w-full bg-white border border-gray-300 rounded px-3 py-2
+           text-sm text-black placeholder-gray-400
+           focus:outline-none focus:border-black focus:ring-1 focus:ring-black/10
+           transition-colors;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold;
+  }
+
+  .badge-active  { @apply badge bg-black text-white; }
+  .badge-paused  { @apply badge bg-gray-200 text-gray-700; }
+  .badge-ended   { @apply badge bg-gray-100 text-gray-500; }
+
+  /* Amount display */
+  .amount {
+    @apply font-mono tabular-nums slashed-zero;
+  }
+}
