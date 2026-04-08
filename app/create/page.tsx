@@ -1,10 +1,15 @@
 'use client';
 
-import { useState }          from 'react';
-import { useForm }           from 'react-hook-form';
-import { zodResolver }       from '@hookform/resolvers/zod';
-import { z }                 from 'zod';
-import { ArrowRight, Info }  from 'lucide-react';
+import { useState }         from 'react';
+import { useRouter }        from 'next/navigation';
+import { useForm }          from 'react-hook-form';
+import { zodResolver }      from '@hookform/resolvers/zod';
+import { z }                from 'zod';
+import { ArrowRight, Info } from 'lucide-react';
+import { useWallet }        from '@/contexts/WalletContext';
+import { createStream }     from '@/lib/factory';
+import { toStroops }        from '@/lib/format';
+import { TOKENS_TESTNET }   from '@/lib/tokens';
 
 const schema = z.object({
   recipient:       z.string().min(56, 'Must be a valid Stellar address').max(56),
@@ -16,34 +21,83 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const TOKENS = [
-  { id: 'native', label: 'XLM (native)' },
-  { id: 'usdc',   label: 'USDC' },
-];
-
 export default function CreatePage() {
+  const router = useRouter();
+  const { publicKey, signTx, connected } = useWallet();
+
   const [step,    setStep]    = useState<1 | 2>(1);
   const [pending, setPending] = useState(false);
+  const [txHash,  setTxHash]  = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { token: 'native', clawback: false, durationSeconds: 2592000 },
+    defaultValues: { token: 'XLM', clawback: false, durationSeconds: 2592000 },
   });
 
   const deposit  = watch('depositAmount');
   const duration = watch('durationSeconds');
-  const rate     = deposit && duration
+  const token    = watch('token');
+
+  const rate = deposit && duration
     ? (parseFloat(deposit) * 1e7 / duration).toFixed(2)
     : '—';
 
+  const ratePerDay = deposit && duration
+    ? (parseFloat(deposit) / (duration / 86400)).toFixed(4)
+    : null;
+
   async function onSubmit(data: FormValues) {
+    if (!publicKey) {
+      setError('Connect your wallet first.');
+      return;
+    }
     setPending(true);
+    setError(null);
+
     try {
-      // TODO: call conduit SDK client.streams.create(data)
-      console.log('Creating stream:', data);
+      const tokenMeta = TOKENS_TESTNET.find(t => t.symbol === data.token);
+      const tokenAddr = tokenMeta?.address;
+      if (!tokenAddr) throw new Error(`Unknown token: ${data.token}`);
+
+      const depositStroops = toStroops(data.depositAmount);
+      const rateStroops    = depositStroops / BigInt(data.durationSeconds);
+      const startTime      = Math.floor(Date.now() / 1000) + 60; // 60s buffer
+      const endTime        = startTime + data.durationSeconds;
+
+      const hash = await createStream({
+        sender:     publicKey,
+        recipient:  data.recipient,
+        token:      tokenAddr,
+        deposit:    depositStroops,
+        ratePerSec: rateStroops,
+        startTime,
+        endTime,
+        clawback:   data.clawback,
+      }, signTx);
+
+      setTxHash(hash);
+      setTimeout(() => router.push('/streams'), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Transaction failed');
     } finally {
       setPending(false);
     }
+  }
+
+  if (txHash) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-10 text-center">
+        <div className="card py-12">
+          <p className="text-4xl mb-4">✓</p>
+          <h1 className="text-xl font-black mb-2">Stream created</h1>
+          <p className="text-sm text-gray-500 mb-4">
+            Transaction confirmed. Redirecting to your streams…
+          </p>
+          <p className="font-mono text-xs text-gray-400 break-all">{txHash}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -53,6 +107,12 @@ export default function CreatePage() {
         Tokens will be deployed into a new DripStream contract and released continuously.
       </p>
 
+      {!connected && (
+        <div className="card border-gray-200 bg-gray-50 text-sm text-gray-600 mb-6 py-3 px-4">
+          Connect your wallet before creating a stream.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
         {/* Recipient */}
@@ -60,7 +120,7 @@ export default function CreatePage() {
           <label className="block text-xs font-semibold mb-1">Recipient address</label>
           <input
             {...register('recipient')}
-            placeholder="G..."
+            placeholder="G…"
             className="input font-mono"
           />
           {errors.recipient && (
@@ -72,8 +132,8 @@ export default function CreatePage() {
         <div>
           <label className="block text-xs font-semibold mb-1">Token</label>
           <select {...register('token')} className="input">
-            {TOKENS.map(t => (
-              <option key={t.id} value={t.id}>{t.label}</option>
+            {TOKENS_TESTNET.map(t => (
+              <option key={t.symbol} value={t.symbol}>{t.symbol} — {t.name}</option>
             ))}
           </select>
         </div>
@@ -103,7 +163,7 @@ export default function CreatePage() {
             type="number"
           />
           <p className="text-xs text-gray-400 mt-1">
-            {duration ? `${Math.round(duration / 86400)} days` : ''}
+            {duration ? `${Math.floor(duration / 86400)}d ${Math.floor((duration % 86400) / 3600)}h` : ''}
           </p>
           {errors.durationSeconds && (
             <p className="text-xs text-red-600 mt-1">{errors.durationSeconds.message}</p>
@@ -114,10 +174,17 @@ export default function CreatePage() {
         {deposit && duration && (
           <div className="card bg-gray-50 border-gray-100 flex items-start gap-2">
             <Info className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-gray-600">
-              Release rate: <span className="font-mono font-semibold text-black">{rate} stroops/s</span>
-              {' '}({(parseFloat(deposit) / (duration / 86400)).toFixed(4)} per day)
-            </p>
+            <div className="text-xs text-gray-600 space-y-0.5">
+              <p>
+                Release rate:{' '}
+                <span className="font-mono font-semibold text-black">{rate} stroops/s</span>
+              </p>
+              {ratePerDay && (
+                <p>
+                  ≈ <span className="font-semibold text-black">{ratePerDay} {token}</span> per day
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -131,15 +198,27 @@ export default function CreatePage() {
           <div>
             <span className="text-sm font-semibold">Enable clawback</span>
             <p className="text-xs text-gray-500 mt-0.5">
-              Allows you to reclaim unstreamed tokens at any time. Cannot be enabled after creation.
+              Allows you to reclaim unstreamed tokens at any time. Recipients can see this flag —
+              use only when necessary.
             </p>
           </div>
         </label>
 
+        {/* Error */}
+        {error && (
+          <p className="text-xs text-red-600 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
+
         {/* Submit */}
-        <button type="submit" disabled={pending} className="btn-primary w-full">
+        <button
+          type="submit"
+          disabled={pending || !connected}
+          className="btn-primary w-full"
+        >
           {pending ? 'Signing transaction…' : 'Create stream'}
-          <ArrowRight className="w-4 h-4" />
+          {!pending && <ArrowRight className="w-4 h-4" />}
         </button>
       </form>
     </div>
