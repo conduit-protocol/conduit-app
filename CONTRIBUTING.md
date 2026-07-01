@@ -345,21 +345,86 @@ chore(deps): bump next to 15.2.1
 
 ## Pull Request Process
 
-### Checklist before opening
+### Branch naming
 
+```
+feat/<issue-number>-short-slug      # new feature or UI
+fix/<issue-number>-short-slug       # bug fix
+refactor/<issue-number>-short-slug  # component refactor
+test/<issue-number>-short-slug      # tests only
+docs/<issue-number>-short-slug      # docs only
+style/<issue-number>-short-slug     # visual / design only
+```
+
+Examples: `fix/1-start-time-buffer`, `feat/5-force-cancel-ui`
+
+### 5-commit convention
+
+Every PR must contain **at least 5 commits**. They must follow this logical order — reviewers read them in sequence:
+
+| # | Commit type | What it contains |
+|---|---|---|
+| 1 | `test(<scope>): add unit test for <issue>` | Tests for the logic being changed — written first. UI logic tests live in `lib/` or alongside components. Expected to fail (or not exist) before the fix. |
+| 2 | `fix(<scope>)` or `feat(<scope>)`: core implementation | The minimal change to make tests pass: the logic fix, new hook, or new contract call. No styling in this commit. |
+| 3 | `feat(<scope>)`: UI components and layout | Rendering layer: the JSX, props, conditional display. No business logic in this commit. |
+| 4 | `style(<scope>)`: visual polish and accessibility | Tailwind classes, aria attributes, loading skeletons, responsive adjustments. No logic. |
+| 5 | `chore(<scope>)`: typecheck + lint pass | Fix any TypeScript or ESLint issues surfaced by the change. No functional changes. |
+
+**Rules:**
+- Every commit body must explain **why** this change is needed, not just what it does.
+- Reference the issue in the core implementation commit: `Closes #1`.
+- No merge commits or `fixup!` commits in the branch — rebase and amend before review.
+- Commits 2 and 3 must be separately `git cherry-pick`-able (no styling mixed into logic commits).
+
+### Example commit sequence for fix/1-start-time-buffer
+
+```
+test(create): add test — streams with <300s buffer fail BackdatedStream
+
+fix(create): increase startTime buffer to 300s to cover tx inclusion lag
+
+feat(create): show user-friendly error message for BackdatedStream failures
+
+style(create): add buffer-time note to duration helper text
+
+chore(create): typecheck and lint clean after create page changes
+```
+
+### Author checklist before opening a PR
+
+- [ ] Branch name follows the naming convention above
+- [ ] PR title: `fix(create): increase start time buffer to 300s (#1)`
+- [ ] PR body includes `Closes #<n>` or `Fixes #<n>`
+- [ ] At least 5 commits, each with a body explaining why
 - [ ] `npm run typecheck` — no errors
 - [ ] `npm run lint` — no warnings
 - [ ] `npm test` — all tests pass
 - [ ] `npm run build` — production build succeeds
-- [ ] Tested in the browser with a connected Freighter wallet on testnet
-- [ ] No hue-named colour classes introduced
+- [ ] Tested in the browser with a connected Freighter wallet on testnet (describe what you clicked)
+- [ ] No hue-named colour classes introduced (exception: `text-red-600` / `text-green-600` with `aria-label`)
 - [ ] Loading and error states handled for any new data-fetching UI
-- [ ] `CHANGELOG.md` entry added under `[Unreleased]`
+- [ ] `CHANGELOG.md` entry under `[Unreleased]`
+- [ ] Before/after screenshots included for any visible UI change
 
 ### Review requirements
 
-- At least **1 approval** from a maintainer.
-- PRs changing `lib/soroban.ts` or `contexts/WalletContext.tsx` require **2 approvals** — these are critical security boundaries.
+- **Mandatory owner review:** Every PR requires approval from **@jaydbrown** before it can be merged. This applies to all PRs — including docs, style, and chore PRs.
+- PRs changing `lib/soroban.ts` or `contexts/WalletContext.tsx` additionally require **1 further maintainer approval** (2 approvals total) — these are critical security boundaries.
+- CI must be green (typecheck, lint, tests, build).
+
+### Reviewer checklist
+
+- [ ] Commit 1 is a test that fails on `main` (or demonstrates the missing coverage)
+- [ ] Logic commit (commit 2) contains no Tailwind class changes
+- [ ] UI commit (commit 3) contains no business logic
+- [ ] No hue-named colour classes without an `aria-label`
+- [ ] All data-fetching UI has a loading and error state
+- [ ] No `Number()` on large bigint values
+- [ ] No `any` types in TypeScript
+- [ ] No direct imports of `@stellar/stellar-sdk` in page or component files (only `lib/`)
+- [ ] Wallet address validation uses `StrKey.isValidEd25519PublicKey()` (not length-only)
+- [ ] 5-commit minimum is met and commits are in logical order
+- [ ] Screenshots attached for visible UI changes
 
 ### Screenshots
 
